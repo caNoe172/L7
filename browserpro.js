@@ -189,7 +189,7 @@ function gogoebashit(cookieString, userAgent, proxy) {
         args = [
             "GET",
             target,
-            "10",
+            "1000",
             requests,
             "--debug",
             "--browserp", `${proxy}`,
